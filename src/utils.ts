@@ -61,6 +61,41 @@ export function safeEnumConvert<T extends Record<string, string | number>>(enumO
 }
 
 /**
+ * Returns the string name for a numeric enum value, or undefined if no member matches.
+ * For TypeScript numeric enums this is equivalent to `enumObject[value]`, but is
+ * defensive against non-number inputs (which would otherwise index by key and
+ * silently return another numeric value via the reverse mapping).
+ *
+ * @param enumObject The TypeScript numeric enum object
+ * @param value The numeric value to look up
+ * @returns The enum member name, or undefined if no exact match
+ */
+export function enumIntToName<T extends Record<string, string | number>>(enumObject: T, value: number | undefined | null): string | undefined {
+  if (typeof value !== "number") return undefined;
+  const name = (enumObject as Record<number, string>)[value];
+  return typeof name === "string" ? name : undefined;
+}
+
+/**
+ * Decorates an object that carries a numeric enum field with a sibling string
+ * label, so MCP clients (and LLMs) don't have to memorize integer enum values.
+ *
+ * Returns a shallow copy with `${field}` preserved and `${field}Name` added.
+ * If the field is missing or doesn't match an enum member, the input is
+ * returned unchanged.
+ *
+ * @example
+ *   decodeEnumField({ status: 2 }, "status", PullRequestStatus)
+ *   // => { status: 2, statusName: "Abandoned" }
+ */
+export function decodeEnumField<T extends object, K extends keyof T, E extends Record<string, string | number>>(obj: T, field: K, enumObject: E): T & Partial<Record<`${string & K}Name`, string>> {
+  const value = obj[field] as unknown;
+  const name = enumIntToName(enumObject, value as number);
+  if (name === undefined) return obj as T & Partial<Record<`${string & K}Name`, string>>;
+  return { ...obj, [`${String(field)}Name`]: name } as T & Partial<Record<`${string & K}Name`, string>>;
+}
+
+/**
  * Encodes `>` and `<` for Markdown formatted fields.
  *
  * @param value The text value to encode

@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { AlertType, AlertValidityStatus, Confidence, Severity, State } from "azure-devops-node-api/interfaces/AlertInterfaces";
-import { createEnumMapping, encodeFormattedValue, extractAdoStreamError, getEnumKeys, mapStringArrayToEnum, mapStringToEnum, safeEnumConvert } from "../../src/utils";
+import { PullRequestAsyncStatus, PullRequestStatus } from "azure-devops-node-api/interfaces/GitInterfaces";
+import { createEnumMapping, decodeEnumField, encodeFormattedValue, enumIntToName, extractAdoStreamError, getEnumKeys, mapStringArrayToEnum, mapStringToEnum, safeEnumConvert } from "../../src/utils";
 
 describe("utils", () => {
   describe("createEnumMapping", () => {
@@ -520,6 +521,47 @@ describe("encodeFormattedValue", () => {
       const twice = encodeFormattedValue(once, "Markdown");
       expect(once).toBe("Already &lt;tag&gt; plus &lt;new&gt; and $cash");
       expect(twice).toBe(once);
+    });
+  });
+
+  describe("enumIntToName", () => {
+    it("returns the enum member name for a known numeric value", () => {
+      expect(enumIntToName(PullRequestStatus, PullRequestStatus.Active)).toBe("Active");
+      expect(enumIntToName(PullRequestStatus, 2)).toBe("Abandoned");
+      expect(enumIntToName(PullRequestStatus, 3)).toBe("Completed");
+    });
+
+    it("returns undefined for non-number inputs", () => {
+      expect(enumIntToName(PullRequestStatus, undefined)).toBeUndefined();
+      expect(enumIntToName(PullRequestStatus, null)).toBeUndefined();
+      expect(enumIntToName(PullRequestStatus, "Active" as unknown as number)).toBeUndefined();
+    });
+
+    it("returns undefined for values not in the enum", () => {
+      expect(enumIntToName(PullRequestStatus, 9999)).toBeUndefined();
+    });
+  });
+
+  describe("decodeEnumField", () => {
+    it("adds a string sibling field for a known numeric enum value", () => {
+      const decoded = decodeEnumField({ id: 1, status: PullRequestStatus.Abandoned }, "status", PullRequestStatus);
+      expect(decoded).toEqual({ id: 1, status: PullRequestStatus.Abandoned, statusName: "Abandoned" });
+    });
+
+    it("disambiguates field-name collisions across enums", () => {
+      // status=2 means Abandoned for PullRequestStatus, but Conflicts for PullRequestAsyncStatus.
+      // The mistake this prevents is reading status=2 as 'Completed' (BuildStatus.Completed=2).
+      const pr = decodeEnumField({ status: 2 as PullRequestStatus }, "status", PullRequestStatus);
+      const merge = decodeEnumField({ mergeStatus: 2 as PullRequestAsyncStatus }, "mergeStatus", PullRequestAsyncStatus);
+      expect(pr).toEqual({ status: 2, statusName: "Abandoned" });
+      expect(merge).toEqual({ mergeStatus: 2, mergeStatusName: "Conflicts" });
+    });
+
+    it("returns the original object unchanged when the value is missing or unknown", () => {
+      const missing = decodeEnumField({ id: 1 } as { id: number; status?: number }, "status", PullRequestStatus);
+      expect(missing).toEqual({ id: 1 });
+      const unknown = decodeEnumField({ status: 9999 }, "status", PullRequestStatus);
+      expect(unknown).toEqual({ status: 9999 });
     });
   });
 });
